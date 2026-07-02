@@ -1,0 +1,13 @@
+// lib/calendar-tasks.ts
+'use client'
+ import { useTasksContext, Task } from '../app/context/tasks-context'
+
+// Agrupa las tareas por fecha (YYYY-MM-DD) para pintarlas en el calendario
+export function useTasksByDate(): Record<string, Task[]> {
+  const { tasks } = useTasksContext()
+  return tasks.reduce<Record<string, Task[]>>((acc, task) => {
+    if (!task.dueDate) return acc
+    acc[task.dueDate] = [...(acc[task.dueDate] ?? []), task]
+    return acc
+  }, {})
+}
