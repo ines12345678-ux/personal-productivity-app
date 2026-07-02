@@ -56,7 +56,7 @@ function TaskCard({
 }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } =
     useSortable({ id: task.id })
-  const { getAreaName, getProjectName } = useCategoriesContext()
+  const { getAreaName, getProjectName, getAreaColorDot } = useCategoriesContext()
 
   const style = {
     transform: CSS.Transform.toString(transform),
@@ -71,11 +71,12 @@ function TaskCard({
       {...attributes}
       {...listeners}
       onClick={onSelect}
-      className={`bg-card rounded-lg p-3 cursor-grab active:cursor-grabbing border-l-4 shadow-sm hover:shadow transition
-        ${isSelected ? 'border-primary bg-primary/5' : 'border-transparent'}`}
+      className={`bg-card rounded-lg p-3 cursor-grab active:cursor-grabbing border shadow-sm hover:shadow transition
+        ${isSelected ? 'border-muted-foreground/50 bg-muted/40' : 'border-transparent'}`}
     >
       <p className="font-medium text-sm text-card-foreground">{task.title}</p>
-      <p className="text-xs text-muted-foreground mt-0.5">
+      <p className="text-xs text-muted-foreground mt-0.5 flex items-center gap-1.5">
+        <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${getAreaColorDot(task.areaId)}`} />
         {getAreaName(task.areaId)} · {getProjectName(task.projectId)}
       </p>
 
@@ -259,7 +260,7 @@ export default function TasksPage() {
 
         <DragOverlay>
           {activeTask ? (
-            <div className="bg-card rounded-lg p-3 shadow-lg border-l-4 border-primary w-[280px]">
+            <div className="bg-card rounded-lg p-3 shadow-lg border border-border w-[280px]">
               <p className="font-medium text-sm">{activeTask.title}</p>
             </div>
           ) : null}

@@ -5,16 +5,18 @@ import { useMemo, useState } from 'react'
 import { NotebookPen, Plus, Trash2, ChevronDown, ChevronRight } from 'lucide-react'
 import { useNotesContext, Note } from '../context/notes-context'
 import { useCategoriesContext } from '../context/categories-context'
+import { CreateCategoryDialog } from '../create-category-dialog'
 
 const NO_AREA_KEY = '__none__'
 const CREATE_NEW = '__create_new__'
 
 export default function NotesPage() {
   const { notes, addNote, updateNote, deleteNote } = useNotesContext()
-  const { areas, getAreaName, addArea } = useCategoriesContext()
+  const { areas, getAreaName, getAreaColorDot } = useCategoriesContext()
 
   const [selectedNoteId, setSelectedNoteId] = useState<string | null>(notes[0]?.id ?? null)
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>({})
+  const [showAreaDialog, setShowAreaDialog] = useState(false)
 
   const selectedNote = notes.find((n) => n.id === selectedNoteId) ?? null
 
@@ -47,10 +49,7 @@ export default function NotesPage() {
   const handleAreaSelectChange = (value: string) => {
     if (!selectedNote) return
     if (value === CREATE_NEW) {
-      const name = window.prompt('Nombre de la nueva área:')
-      if (!name || !name.trim()) return
-      const newId = addArea(name.trim())
-      updateNote(selectedNote.id, { areaId: newId })
+      setShowAreaDialog(true)
       return
     }
     updateNote(selectedNote.id, { areaId: value || null })
@@ -93,6 +92,9 @@ export default function NotesPage() {
                   className="w-full flex items-center gap-1.5 px-3 py-2 text-xs font-medium text-muted-foreground hover:bg-muted/50"
                 >
                   {isCollapsed ? <ChevronRight className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
+                  {key !== NO_AREA_KEY && (
+                    <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${getAreaColorDot(key)}`} />
+                  )}
                   {groupLabel(key)}
                   <span className="ml-auto text-muted-foreground/60">{grouped[key].length}</span>
                 </button>
@@ -104,7 +106,7 @@ export default function NotesPage() {
                         <button
                           onClick={() => setSelectedNoteId(note.id)}
                           className={`w-full text-left px-4 py-2.5 hover:bg-muted/50 transition border-l-2
-                            ${selectedNoteId === note.id ? 'bg-primary/5 border-primary' : 'border-transparent'}`}
+                            ${selectedNoteId === note.id ? 'bg-muted/50 border-muted-foreground/50' : 'border-transparent'}`}
                         >
                           <p className="text-sm font-medium text-foreground truncate">
                             {note.title || 'Sin título'}
@@ -172,6 +174,18 @@ export default function NotesPage() {
           )}
         </div>
       </div>
+
+      {showAreaDialog && (
+        <CreateCategoryDialog
+          open
+          kind="area"
+          onClose={() => setShowAreaDialog(false)}
+          onCreated={(id) => {
+            if (selectedNote) updateNote(selectedNote.id, { areaId: id })
+            setShowAreaDialog(false)
+          }}
+        />
+      )}
     </div>
   )
 }

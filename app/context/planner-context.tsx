@@ -3,18 +3,20 @@
 
 import { createContext, useContext, useState, ReactNode } from 'react'
 
-export type TimeBlock = {
+export type PlannerEvent = {
   id: string
   date: string // YYYY-MM-DD
-  hour: number // 0-23
-  text: string
+  time: string // "HH:mm", 24h
+  title: string
 }
 
 type PlannerContextType = {
-  timeBlocks: TimeBlock[]
+  events: PlannerEvent[]
   dayNotes: Record<string, string>
-  getTimeBlocksForDate: (date: string) => TimeBlock[]
-  setHourText: (date: string, hour: number, text: string) => void
+  getEventsForDate: (date: string) => PlannerEvent[]
+  addEvent: (date: string, time: string, title: string) => string
+  updateEvent: (id: string, partial: Partial<Pick<PlannerEvent, 'time' | 'title'>>) => void
+  deleteEvent: (id: string) => void
   getDayNote: (date: string) => string
   setDayNote: (date: string, text: string) => void
 }
@@ -22,25 +24,24 @@ type PlannerContextType = {
 const PlannerContext = createContext<PlannerContextType | null>(null)
 
 export function PlannerProvider({ children }: { children: ReactNode }) {
-  const [timeBlocks, setTimeBlocks] = useState<TimeBlock[]>([])
+  const [events, setEvents] = useState<PlannerEvent[]>([])
   const [dayNotes, setDayNotes] = useState<Record<string, string>>({})
 
-  const getTimeBlocksForDate = (date: string) =>
-    timeBlocks.filter((b) => b.date === date).sort((a, b) => a.hour - b.hour)
+  const getEventsForDate = (date: string) =>
+    events.filter((e) => e.date === date).sort((a, b) => a.time.localeCompare(b.time))
 
-  // Una franja por hora: si escribes texto lo crea/actualiza,
-  // si la dejas vacía la elimina. Así no acumulamos bloques vacíos.
-  const setHourText = (date: string, hour: number, text: string) => {
-    setTimeBlocks((prev) => {
-      const existing = prev.find((b) => b.date === date && b.hour === hour)
-      if (!text.trim()) {
-        return existing ? prev.filter((b) => b.id !== existing.id) : prev
-      }
-      if (existing) {
-        return prev.map((b) => (b.id === existing.id ? { ...b, text } : b))
-      }
-      return [...prev, { id: crypto.randomUUID(), date, hour, text }]
-    })
+  const addEvent = (date: string, time: string, title: string) => {
+    const id = crypto.randomUUID()
+    setEvents((prev) => [...prev, { id, date, time, title }])
+    return id
+  }
+
+  const updateEvent = (id: string, partial: Partial<Pick<PlannerEvent, 'time' | 'title'>>) => {
+    setEvents((prev) => prev.map((e) => (e.id === id ? { ...e, ...partial } : e)))
+  }
+
+  const deleteEvent = (id: string) => {
+    setEvents((prev) => prev.filter((e) => e.id !== id))
   }
 
   const getDayNote = (date: string) => dayNotes[date] ?? ''
@@ -51,7 +52,16 @@ export function PlannerProvider({ children }: { children: ReactNode }) {
 
   return (
     <PlannerContext.Provider
-      value={{ timeBlocks, dayNotes, getTimeBlocksForDate, setHourText, getDayNote, setDayNote }}
+      value={{
+        events,
+        dayNotes,
+        getEventsForDate,
+        addEvent,
+        updateEvent,
+        deleteEvent,
+        getDayNote,
+        setDayNote,
+      }}
     >
       {children}
     </PlannerContext.Provider>
