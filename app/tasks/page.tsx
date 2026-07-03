@@ -2,7 +2,7 @@
 'use client'
 
 import { useMemo, useState } from 'react'
-import { CheckCircle2, Plus, Settings2 } from 'lucide-react'
+import { Archive, CheckCircle2, Plus, Settings2 } from 'lucide-react'
 import {
   DndContext,
   DragEndEvent,
@@ -112,12 +112,14 @@ function Column({
   tasks,
   selectedTaskId,
   onSelect,
+  onArchiveDone,
 }: {
   status: Task['status']
   label: string
   tasks: Task[]
   selectedTaskId: string | null
   onSelect: (id: string) => void
+  onArchiveDone?: () => void
 }) {
   const { setNodeRef, isOver } = useDroppable({
     id: status,
@@ -155,6 +157,18 @@ function Column({
           )}
         </div>
       </SortableContext>
+
+      {status === 'done' && (
+        <button
+          type="button"
+          onClick={onArchiveDone}
+          disabled={tasks.length === 0}
+          className="w-full mt-2 flex items-center justify-center gap-2 rounded-md border border-border bg-background px-3 py-2 text-sm text-muted-foreground hover:bg-muted/50 disabled:opacity-50 disabled:cursor-not-allowed"
+        >
+          <Archive className="w-4 h-4" />
+          Enviar Done al historial
+        </button>
+      )}
     </div>
   )
 }
@@ -167,6 +181,7 @@ export default function TasksPage() {
     addTask,
     reorderWithinStatus,
     moveTaskToStatus,
+    archiveDoneTasks,
   } = useTasksContext()
 
   const [isCreating, setIsCreating] = useState(false)
@@ -217,24 +232,19 @@ export default function TasksPage() {
     const draggedStatus = dragged.status
     const overIsColumn = columnKeys.has(overId as Task['status'])
 
-    // Si sueltas encima de una columna vacía o del contenedor
     if (overIsColumn) {
       const targetStatus = overId as Task['status']
-
       if (draggedStatus !== targetStatus) {
         moveTaskToStatus(dragged.id, targetStatus)
       }
-
       return
     }
 
-    // Si sueltas encima de otra tarjeta
     const overTask = tasks.find((t) => t.id === overId)
     if (!overTask) return
 
     const targetStatus = overTask.status
 
-    // 1) Reordenar dentro de la misma columna
     if (draggedStatus === targetStatus) {
       const columnTasks = tasksByStatus[targetStatus]
       const oldIndex = columnTasks.findIndex((t) => t.id === activeId)
@@ -247,11 +257,8 @@ export default function TasksPage() {
       return
     }
 
-    // 2) Mover entre columnas colocándolo en la posición del elemento sobre el que sueltas
-    // Primero lo movemos de status
     moveTaskToStatus(dragged.id, targetStatus)
 
-    // Luego reordenamos la columna destino para meterlo justo en la posición de overTask
     const destinationTasks = tasksByStatus[targetStatus]
     const withoutDragged = destinationTasks.filter((t) => t.id !== dragged.id)
 
@@ -264,10 +271,7 @@ export default function TasksPage() {
       status: targetStatus,
     })
 
-    reorderWithinStatus(
-      targetStatus,
-      reorderedDestination.map((t) => t.id)
-    )
+    reorderWithinStatus(targetStatus, reorderedDestination.map((t) => t.id))
   }
 
   return (
@@ -345,6 +349,7 @@ export default function TasksPage() {
               tasks={tasksByStatus[col.key]}
               selectedTaskId={selectedTaskId}
               onSelect={setSelectedTaskId}
+              onArchiveDone={col.key === 'done' ? archiveDoneTasks : undefined}
             />
           ))}
         </div>

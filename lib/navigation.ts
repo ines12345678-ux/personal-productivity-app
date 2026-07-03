@@ -6,10 +6,9 @@ import {
   type LucideIcon,
   NotebookPen,
   Plane,
-  Settings,
-  KanbanSquare,
   Sprout,
   Wallet,
+  Archive,
 } from 'lucide-react'
 
 export type NavItem = {
@@ -39,7 +38,7 @@ export const navSections: NavSection[] = [
   {
     label: 'Work',
     items: [
-            {
+      {
         title: 'Planner',
         href: '/planner',
         icon: CalendarDays,
@@ -51,12 +50,17 @@ export const navSections: NavSection[] = [
         icon: CheckCircle2,
         description: 'Capture, organize, and complete what matters.',
       },
-
       {
         title: 'Notes',
         href: '/notes',
         icon: NotebookPen,
         description: 'A quiet space for ideas, docs, and knowledge.',
+      },
+      {
+        title: 'Historical',
+        href: '/historical',
+        icon: Archive,
+        description: 'Archived completed tasks grouped by category.',
       },
     ],
   },
@@ -91,12 +95,6 @@ export const navSections: NavSection[] = [
         href: '/statistics',
         icon: BarChart3,
         description: 'Trends and reflections drawn from your workspace.',
-      },
-      {
-        title: 'Settings',
-        href: '/settings',
-        icon: Settings,
-        description: 'Tune Aura to match the way you think and work.',
       },
     ],
   },

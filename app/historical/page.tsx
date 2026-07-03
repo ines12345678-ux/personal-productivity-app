@@ -2,12 +2,12 @@
 'use client'
 
 import { useMemo } from 'react'
-import { Archive } from 'lucide-react'
+import { Archive, RotateCcw } from 'lucide-react'
 import { useTasksContext } from '../context/tasks-context'
 import { useCategoriesContext } from '../context/categories-context'
 
 export default function HistoryPage() {
-  const { historyTasks } = useTasksContext()
+  const { historyTasks, restoreTaskFromHistory } = useTasksContext()
   const { areas, getAreaName, getProjectName, getAreaColorDot } = useCategoriesContext()
 
   const grouped = useMemo(() => {
@@ -69,20 +69,22 @@ export default function HistoryPage() {
                 {tasks.map((task) => (
                   <div
                     key={task.id}
-                    className="rounded-xl border border-border bg-card p-4 space-y-2"
+                    className="rounded-xl border border-border bg-card p-4 space-y-3"
                   >
                     <div className="flex items-start justify-between gap-3">
-                      <p className="font-medium text-sm text-foreground">
-                        {task.title}
-                      </p>
+                      <div>
+                        <p className="font-medium text-sm text-foreground">
+                          {task.title}
+                        </p>
+                        <p className="text-xs text-muted-foreground mt-1">
+                          {task.projectId ? getProjectName(task.projectId) : 'Sin proyecto'}
+                        </p>
+                      </div>
+
                       <span className="text-[11px] text-muted-foreground shrink-0">
                         {task.priority}
                       </span>
                     </div>
-
-                    <p className="text-xs text-muted-foreground">
-                      {task.projectId ? getProjectName(task.projectId) : 'Sin proyecto'}
-                    </p>
 
                     {task.subtasks.length > 0 && (
                       <div className="space-y-1 pt-1">
@@ -111,6 +113,14 @@ export default function HistoryPage() {
                         ? new Date(task.archivedAt).toLocaleString('es-ES')
                         : '—'}
                     </div>
+
+                    <button
+                      onClick={() => restoreTaskFromHistory(task.id)}
+                      className="w-full flex items-center justify-center gap-2 rounded-lg border border-border px-3 py-2 text-sm hover:bg-muted/50 transition"
+                    >
+                      <RotateCcw className="w-4 h-4" />
+                      Restore to To Do
+                    </button>
                   </div>
                 ))}
               </div>
