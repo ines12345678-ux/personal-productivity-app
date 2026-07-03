@@ -28,7 +28,7 @@ export function Sidebar({ collapsed, onToggleCollapse }: SidebarProps) {
         </div>
         {!collapsed && (
           <div className="flex flex-col leading-tight">
-            <span className="text-sm font-semibold tracking-tight">Alberola</span>
+            <span className="text-sm font-semibold tracking-tight">Alby</span>
             <span className="text-xs text-muted-foreground">
               Personal Planner
             </span>

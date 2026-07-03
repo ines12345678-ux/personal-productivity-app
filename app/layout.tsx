@@ -24,7 +24,7 @@ const geistMono = Geist_Mono({
 })
 
 export const metadata: Metadata = {
-  title: 'Agenda Alberola',
+  title: 'My Planner ',
   description:
     'A calm, premium personal OS unifying tasks, planning, notes, habits, finances, and travel in one beautiful workspace.',
   generator: 'v0.app',
