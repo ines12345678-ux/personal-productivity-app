@@ -1,7 +1,7 @@
 // app/tasks/page.tsx
 'use client'
 
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
 import { CheckCircle2, Plus, Settings2 } from 'lucide-react'
 import {
   DndContext,
@@ -9,10 +9,12 @@ import {
   DragOverlay,
   DragStartEvent,
   PointerSensor,
-  closestCorners,
+  closestCenter,
+  pointerWithin,
   useDroppable,
   useSensor,
   useSensors,
+  type CollisionDetection,
 } from '@dnd-kit/core'
 import {
   SortableContext,
@@ -31,6 +33,8 @@ const columns: { key: Task['status']; label: string }[] = [
   { key: 'in-progress', label: 'In Progress' },
   { key: 'done', label: 'Done' },
 ]
+
+const columnKeys = new Set<Task['status']>(['todo', 'in-progress', 'done'])
 
 const priorityColor: Record<Task['priority'], string> = {
   low: 'text-muted-foreground',
@@ -57,6 +61,7 @@ function TaskCard({
 }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } =
     useSortable({ id: task.id })
+
   const { getAreaName, getProjectName, getAreaColorDot } = useCategoriesContext()
 
   const style = {
@@ -76,6 +81,7 @@ function TaskCard({
         ${isSelected ? 'border-muted-foreground/50 bg-muted/40' : 'border-transparent'}`}
     >
       <p className="font-medium text-sm text-card-foreground">{task.title}</p>
+
       <p className="text-xs text-muted-foreground mt-0.5 flex items-center gap-1.5">
         <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${getAreaColorDot(task.areaId)}`} />
         {getAreaName(task.areaId)} · {getProjectName(task.projectId)}
@@ -113,12 +119,14 @@ function Column({
   selectedTaskId: string | null
   onSelect: (id: string) => void
 }) {
-  const { setNodeRef, isOver } = useDroppable({ id: status })
+  const { setNodeRef, isOver } = useDroppable({
+    id: status,
+  })
 
   return (
     <div
       ref={setNodeRef}
-      className={`bg-muted/40 rounded-xl p-3 space-y-3 min-h-[200px] transition-colors
+      className={`bg-muted/40 rounded-xl p-3 space-y-3 min-h-[240px] transition-colors
         ${isOver ? 'ring-2 ring-primary/40 bg-primary/5' : ''}`}
     >
       <div className="flex items-center justify-between px-1">
@@ -126,8 +134,11 @@ function Column({
         <span className="text-xs text-muted-foreground">{tasks.length}</span>
       </div>
 
-      <SortableContext items={tasks.map((t) => t.id)} strategy={verticalListSortingStrategy}>
-        <div className="space-y-2 min-h-[80px]">
+      <SortableContext
+        items={tasks.map((t) => t.id)}
+        strategy={verticalListSortingStrategy}
+      >
+        <div className="space-y-2 min-h-[120px]">
           {tasks.map((task) => (
             <TaskCard
               key={task.id}
@@ -136,8 +147,11 @@ function Column({
               onSelect={() => onSelect(task.id)}
             />
           ))}
+
           {tasks.length === 0 && (
-            <p className="text-xs text-muted-foreground/60 text-center py-4">Sin tareas</p>
+            <p className="text-xs text-muted-foreground/60 text-center py-4">
+              Sin tareas
+            </p>
           )}
         </div>
       </SortableContext>
@@ -161,40 +175,99 @@ export default function TasksPage() {
   const [isManagingCategories, setIsManagingCategories] = useState(false)
 
   const sensors = useSensors(
-    useSensor(PointerSensor, { activationConstraint: { distance: 4 } })
+    useSensor(PointerSensor, {
+      activationConstraint: { distance: 6 },
+    })
   )
 
+  const tasksByStatus = useMemo(
+    () => ({
+      todo: tasks.filter((t) => t.status === 'todo'),
+      'in-progress': tasks.filter((t) => t.status === 'in-progress'),
+      done: tasks.filter((t) => t.status === 'done'),
+    }),
+    [tasks]
+  )
+
+  const collisionDetectionStrategy: CollisionDetection = (args) => {
+    const pointerCollisions = pointerWithin(args)
+    if (pointerCollisions.length > 0) return pointerCollisions
+    return closestCenter(args)
+  }
+
   function handleDragStart(event: DragStartEvent) {
-    const task = tasks.find((t) => t.id === event.active.id)
+    const task = tasks.find((t) => t.id === String(event.active.id))
     setActiveTask(task ?? null)
   }
 
   function handleDragEnd(event: DragEndEvent) {
     setActiveTask(null)
+
     const { active, over } = event
     if (!over) return
 
-    const dragged = tasks.find((t) => t.id === active.id)
+    const activeId = String(active.id)
+    const overId = String(over.id)
+
+    if (activeId === overId) return
+
+    const dragged = tasks.find((t) => t.id === activeId)
     if (!dragged) return
 
-    const overId = String(over.id)
-    const overTask = tasks.find((t) => t.id === overId)
-    const targetStatus = overTask ? overTask.status : (overId as Task['status'])
+    const draggedStatus = dragged.status
+    const overIsColumn = columnKeys.has(overId as Task['status'])
 
-    if (dragged.status !== targetStatus) {
-      moveTaskToStatus(dragged.id, targetStatus)
+    // Si sueltas encima de una columna vacía o del contenedor
+    if (overIsColumn) {
+      const targetStatus = overId as Task['status']
+
+      if (draggedStatus !== targetStatus) {
+        moveTaskToStatus(dragged.id, targetStatus)
+      }
+
       return
     }
 
-    const columnTasks = tasks.filter((t) => t.status === targetStatus)
-    const oldIndex = columnTasks.findIndex((t) => t.id === active.id)
-    const newIndex = overTask
-      ? columnTasks.findIndex((t) => t.id === overId)
-      : columnTasks.length - 1
-    if (oldIndex === -1 || newIndex === -1 || oldIndex === newIndex) return
+    // Si sueltas encima de otra tarjeta
+    const overTask = tasks.find((t) => t.id === overId)
+    if (!overTask) return
 
-    const reordered = arrayMove(columnTasks, oldIndex, newIndex)
-    reorderWithinStatus(targetStatus, reordered.map((t) => t.id))
+    const targetStatus = overTask.status
+
+    // 1) Reordenar dentro de la misma columna
+    if (draggedStatus === targetStatus) {
+      const columnTasks = tasksByStatus[targetStatus]
+      const oldIndex = columnTasks.findIndex((t) => t.id === activeId)
+      const newIndex = columnTasks.findIndex((t) => t.id === overId)
+
+      if (oldIndex === -1 || newIndex === -1 || oldIndex === newIndex) return
+
+      const reordered = arrayMove(columnTasks, oldIndex, newIndex)
+      reorderWithinStatus(targetStatus, reordered.map((t) => t.id))
+      return
+    }
+
+    // 2) Mover entre columnas colocándolo en la posición del elemento sobre el que sueltas
+    // Primero lo movemos de status
+    moveTaskToStatus(dragged.id, targetStatus)
+
+    // Luego reordenamos la columna destino para meterlo justo en la posición de overTask
+    const destinationTasks = tasksByStatus[targetStatus]
+    const withoutDragged = destinationTasks.filter((t) => t.id !== dragged.id)
+
+    const insertIndex = withoutDragged.findIndex((t) => t.id === overTask.id)
+    if (insertIndex === -1) return
+
+    const reorderedDestination = [...withoutDragged]
+    reorderedDestination.splice(insertIndex, 0, {
+      ...dragged,
+      status: targetStatus,
+    })
+
+    reorderWithinStatus(
+      targetStatus,
+      reorderedDestination.map((t) => t.id)
+    )
   }
 
   return (
@@ -205,7 +278,9 @@ export default function TasksPage() {
             <CheckCircle2 className="w-6 h-6" />
             Tasks
           </h1>
-          <p className="text-sm text-muted-foreground">Your unified task system</p>
+          <p className="text-sm text-muted-foreground">
+            Your unified task system
+          </p>
         </div>
 
         <div className="flex items-center gap-2">
@@ -221,7 +296,8 @@ export default function TasksPage() {
             <form
               onSubmit={(e) => {
                 e.preventDefault()
-                addTask(newTaskTitle)
+                if (!newTaskTitle.trim()) return
+                addTask(newTaskTitle.trim())
                 setNewTaskTitle('')
                 setIsCreating(false)
               }}
@@ -235,7 +311,10 @@ export default function TasksPage() {
                 placeholder="Título de la tarea..."
                 className="border border-border rounded-md px-3 py-2 text-sm bg-background"
               />
-              <button type="submit" className="px-3 py-2 rounded-md bg-primary text-primary-foreground text-sm">
+              <button
+                type="submit"
+                className="px-3 py-2 rounded-md bg-primary text-primary-foreground text-sm"
+              >
                 Crear
               </button>
             </form>
@@ -253,7 +332,7 @@ export default function TasksPage() {
 
       <DndContext
         sensors={sensors}
-        collisionDetection={closestCorners}
+        collisionDetection={collisionDetectionStrategy}
         onDragStart={handleDragStart}
         onDragEnd={handleDragEnd}
       >
@@ -263,7 +342,7 @@ export default function TasksPage() {
               key={col.key}
               status={col.key}
               label={col.label}
-              tasks={tasks.filter((t) => t.status === col.key)}
+              tasks={tasksByStatus[col.key]}
               selectedTaskId={selectedTaskId}
               onSelect={setSelectedTaskId}
             />
@@ -280,7 +359,10 @@ export default function TasksPage() {
       </DndContext>
 
       <TaskDetailPanel />
-      <ManageCategoriesDialog open={isManagingCategories} onClose={() => setIsManagingCategories(false)} />
+      <ManageCategoriesDialog
+        open={isManagingCategories}
+        onClose={() => setIsManagingCategories(false)}
+      />
     </div>
   )
 }
