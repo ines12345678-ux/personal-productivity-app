@@ -73,7 +73,7 @@ export function TaskDetailPanel({ variant = 'default', onClose }: TaskDetailPane
 
   if (!selectedTask) return null
 
-  const availableProjects = projectsForArea(selectedTask.areaId)
+  const availableProjects = projectsForArea(selectedTask.areaId ?? '')
 
   const handleAreaChange = (value: string) => {
     if (value === CREATE_NEW) {
@@ -82,7 +82,7 @@ export function TaskDetailPanel({ variant = 'default', onClose }: TaskDetailPane
     }
     const stillValid = projectsForArea(value).some((p) => p.id === selectedTask.projectId)
     updateTask(selectedTask.id, {
-      areaId: value,
+      areaId: value || null,
       projectId: stillValid ? selectedTask.projectId : null,
     })
   }
@@ -119,9 +119,10 @@ export function TaskDetailPanel({ variant = 'default', onClose }: TaskDetailPane
         <div className="grid grid-cols-2 gap-2">
           <select
             className="w-full border border-border rounded p-2 text-sm bg-background text-foreground"
-            value={selectedTask.areaId}
+            value={selectedTask.areaId ?? ''}
             onChange={(e) => handleAreaChange(e.target.value)}
           >
+            <option value="">Sin área</option>
             {areas.map((area) => (
               <option key={area.id} value={area.id}>{area.name}</option>
             ))}
@@ -248,7 +249,7 @@ export function TaskDetailPanel({ variant = 'default', onClose }: TaskDetailPane
         <CreateCategoryDialog
           open
           kind="project"
-          defaultAreaId={selectedTask.areaId}
+          defaultAreaId={selectedTask.areaId ?? ''}
           onClose={() => setDialog(null)}
           onCreated={(id) => {
             updateTask(selectedTask.id, { projectId: id })

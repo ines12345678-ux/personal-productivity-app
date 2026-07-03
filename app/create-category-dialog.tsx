@@ -24,11 +24,20 @@ export function CreateCategoryDialog(props: CategoryDialogProps) {
   const { areas, addArea, addProject } = useCategoriesContext()
   const [name, setName] = useState('')
   const [areaId, setAreaId] = useState(props.kind === 'project' ? props.defaultAreaId : '')
+  const [isSubmitting, setIsSubmitting] = useState(false)
 
+  // Resetea el formulario cada vez que se abre. Si no hay un área por
+  // defecto (la tarea no tenía ninguna asignada), cae en la primera área
+  // disponible para que el <select> y el estado interno no queden
+  // desincronizados (si no, el <select> "parece" tener algo elegido pero
+  // el estado sigue vacío y el submit se bloquea en silencio).
   useEffect(() => {
     if (props.open) {
       setName('')
-      if (props.kind === 'project') setAreaId(props.defaultAreaId)
+      setIsSubmitting(false)
+      if (props.kind === 'project') {
+        setAreaId(props.defaultAreaId || areas[0]?.id || '')
+      }
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [props.open])
@@ -44,18 +53,21 @@ export function CreateCategoryDialog(props: CategoryDialogProps) {
 
   if (!props.open) return null
 
-  // Ahora es async: addArea/addProject devuelven una Promise porque
-  // esperan la respuesta de Supabase antes de tener el id real.
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-    if (!name.trim()) return
-    if (props.kind === 'area') {
-      const id = await addArea(name.trim())
-      if (id) props.onCreated(id)
-    } else {
-      if (!areaId) return
-      const id = await addProject(name.trim(), areaId)
-      if (id) props.onCreated(id)
+    if (!name.trim() || isSubmitting) return
+    setIsSubmitting(true)
+    try {
+      if (props.kind === 'area') {
+        const id = await addArea(name.trim())
+        if (id) props.onCreated(id)
+      } else {
+        if (!areaId) return
+        const id = await addProject(name.trim(), areaId)
+        if (id) props.onCreated(id)
+      }
+    } finally {
+      setIsSubmitting(false)
     }
   }
 
@@ -92,15 +104,21 @@ export function CreateCategoryDialog(props: CategoryDialogProps) {
           {props.kind === 'project' && (
             <div className="space-y-1">
               <label className="text-xs text-muted-foreground">Área</label>
-              <select
-                value={areaId}
-                onChange={(e) => setAreaId(e.target.value)}
-                className="w-full border border-border rounded-md px-3 py-2 text-sm bg-background text-foreground"
-              >
-                {areas.map((area) => (
-                  <option key={area.id} value={area.id}>{area.name}</option>
-                ))}
-              </select>
+              {areas.length === 0 ? (
+                <p className="text-xs text-muted-foreground/70 border border-dashed border-border rounded-md px-3 py-2">
+                  Primero necesitas crear un área.
+                </p>
+              ) : (
+                <select
+                  value={areaId}
+                  onChange={(e) => setAreaId(e.target.value)}
+                  className="w-full border border-border rounded-md px-3 py-2 text-sm bg-background text-foreground"
+                >
+                  {areas.map((area) => (
+                    <option key={area.id} value={area.id}>{area.name}</option>
+                  ))}
+                </select>
+              )}
             </div>
           )}
 
@@ -114,9 +132,10 @@ export function CreateCategoryDialog(props: CategoryDialogProps) {
             </button>
             <button
               type="submit"
-              className="px-3 py-2 rounded-md bg-primary text-primary-foreground text-sm"
+              disabled={isSubmitting || (props.kind === 'project' && areas.length === 0)}
+              className="px-3 py-2 rounded-md bg-primary text-primary-foreground text-sm disabled:opacity-60"
             >
-              Crear
+              {isSubmitting ? 'Creando…' : 'Crear'}
             </button>
           </div>
         </form>
