@@ -13,6 +13,8 @@ import { useCategoriesContext } from './context/categories-context'
 import { usePlannerContext } from './context/planner-context'
 import { TaskDetailPanel } from './task-detail-panel'
 
+const NO_AREA_KEY = 'sin-area'
+
 function getGreeting() {
   const hour = new Date().getHours()
   if (hour < 12) return 'Buenos días'
@@ -26,7 +28,7 @@ function todayISO() {
 
 function getWeekRange() {
   const today = new Date()
-  const day = today.getDay() // 0 domingo, 1 lunes, ...
+  const day = today.getDay()
   const diffToMonday = day === 0 ? -6 : 1 - day
 
   const monday = new Date(today)
@@ -130,8 +132,11 @@ export default function OverviewPage() {
 
   const maxPriority = Math.max(1, ...Object.values(byPriority))
 
+  // areaId ahora puede ser null (Task.areaId: string | null tras la
+  // migración a Supabase), así que usamos una clave de respaldo.
   const byArea = tasks.reduce<Record<string, number>>((acc, t) => {
-    acc[t.areaId] = (acc[t.areaId] ?? 0) + 1
+    const key = t.areaId ?? NO_AREA_KEY
+    acc[key] = (acc[key] ?? 0) + 1
     return acc
   }, {})
 
@@ -142,10 +147,6 @@ export default function OverviewPage() {
       day: 'numeric',
       month: 'short',
     })
-
-  // =========================
-  // RESUMEN DEL PLANNER — ahora usa la semana natural (lunes-domingo)
-  // =========================
 
   const { start: weekStart } = getWeekRange()
   const plannerDates = Array.from({ length: 7 }, (_, i) => addDays(weekStart, i))
@@ -173,9 +174,6 @@ export default function OverviewPage() {
 
   return (
     <div className="p-6 space-y-6 max-w-5xl mx-auto">
-      {/* =========================
-          RESUMEN DEL PLANNER — ARRIBA DEL TODO
-      ========================= */}
       <div className="bg-card border border-border rounded-2xl p-5 space-y-5">
         <div className="flex items-center gap-2">
           <CalendarDays className="w-5 h-5 text-foreground" />
@@ -187,7 +185,6 @@ export default function OverviewPage() {
           </div>
         </div>
 
-        {/* HOY */}
         <div className="space-y-3">
           <div>
             <p className="text-sm font-medium text-foreground">Hoy</p>
@@ -239,7 +236,6 @@ export default function OverviewPage() {
           )}
         </div>
 
-        {/* SEMANA — lunes a domingo */}
         <div className="space-y-3">
           <div>
             <p className="text-sm font-medium text-foreground">Esta semana</p>
@@ -306,7 +302,6 @@ export default function OverviewPage() {
         </div>
       </div>
 
-      {/* HERO */}
       <div className="flex flex-col md:flex-row md:items-center gap-6 bg-card border border-border rounded-2xl p-6">
         <ProgressRing percent={completion} />
         <div className="flex-1">
@@ -329,7 +324,6 @@ export default function OverviewPage() {
         </div>
       </div>
 
-      {/* STAT CARDS */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
         <div className="bg-card border border-border rounded-xl p-4">
           <p className="text-xs text-muted-foreground">Total</p>
@@ -357,7 +351,6 @@ export default function OverviewPage() {
         </div>
       </div>
 
-      {/* BLOQUES PRIORIDAD + ÁREA */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         <div className="bg-card border border-border rounded-xl p-4 space-y-3">
           <p className="text-sm font-medium text-foreground">Por prioridad</p>
@@ -380,7 +373,7 @@ export default function OverviewPage() {
           {Object.entries(byArea).map(([areaId, count]) => (
             <div key={areaId} className="flex items-center gap-3">
               <span className="text-xs w-20 truncate text-muted-foreground">
-                {getAreaName(areaId)}
+                {areaId === NO_AREA_KEY ? 'Sin área' : getAreaName(areaId)}
               </span>
               <div className="flex-1 h-2 bg-muted rounded-full overflow-hidden">
                 <div
@@ -397,7 +390,6 @@ export default function OverviewPage() {
         </div>
       </div>
 
-      {/* VENCIDAS */}
       {overdue.length > 0 && (
         <div className="border border-destructive/30 bg-destructive/5 rounded-xl divide-y divide-destructive/10">
           <div className="px-4 py-3 flex items-center gap-2">
@@ -425,7 +417,6 @@ export default function OverviewPage() {
         </div>
       )}
 
-      {/* PRÓXIMAS TAREAS */}
       <div className="bg-card border border-border rounded-xl divide-y divide-border">
         <div className="px-4 py-3">
           <p className="text-sm font-medium text-foreground">Próximas tareas</p>

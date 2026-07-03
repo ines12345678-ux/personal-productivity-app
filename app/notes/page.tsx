@@ -1,7 +1,7 @@
 // app/notes/page.tsx
 'use client'
 
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { NotebookPen, Plus, Trash2, ChevronDown, ChevronRight } from 'lucide-react'
 import { useNotesContext, Note } from '../context/notes-context'
 import { useCategoriesContext } from '../context/categories-context'
@@ -14,9 +14,18 @@ export default function NotesPage() {
   const { notes, addNote, updateNote, deleteNote } = useNotesContext()
   const { areas, getAreaName, getAreaColorDot } = useCategoriesContext()
 
-  const [selectedNoteId, setSelectedNoteId] = useState<string | null>(notes[0]?.id ?? null)
+  const [selectedNoteId, setSelectedNoteId] = useState<string | null>(null)
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>({})
   const [showAreaDialog, setShowAreaDialog] = useState(false)
+
+  // Selecciona la primera nota en cuanto llegan datos de Supabase,
+  // solo si no hay ninguna seleccionada todavía.
+  useEffect(() => {
+    if (!selectedNoteId && notes.length > 0) {
+      setSelectedNoteId(notes[0].id)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [notes])
 
   const selectedNote = notes.find((n) => n.id === selectedNoteId) ?? null
 
@@ -35,10 +44,11 @@ export default function NotesPage() {
 
   const toggleGroup = (key: string) => setCollapsed((prev) => ({ ...prev, [key]: !prev[key] }))
 
-  const handleAddNote = () => {
+  // Ahora es async: addNote devuelve una Promise porque espera a Supabase.
+  const handleAddNote = async () => {
     const areaId = selectedNote?.areaId ?? areas[0]?.id ?? null
-    const id = addNote(areaId)
-    setSelectedNoteId(id)
+    const id = await addNote(areaId)
+    if (id) setSelectedNoteId(id)
   }
 
   const handleDelete = (id: string) => {

@@ -25,7 +25,6 @@ export function CreateCategoryDialog(props: CategoryDialogProps) {
   const [name, setName] = useState('')
   const [areaId, setAreaId] = useState(props.kind === 'project' ? props.defaultAreaId : '')
 
-  // Resetea el formulario cada vez que se abre
   useEffect(() => {
     if (props.open) {
       setName('')
@@ -45,16 +44,18 @@ export function CreateCategoryDialog(props: CategoryDialogProps) {
 
   if (!props.open) return null
 
-  const handleSubmit = (e: React.FormEvent) => {
+  // Ahora es async: addArea/addProject devuelven una Promise porque
+  // esperan la respuesta de Supabase antes de tener el id real.
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!name.trim()) return
     if (props.kind === 'area') {
-      const id = addArea(name.trim())
-      props.onCreated(id)
+      const id = await addArea(name.trim())
+      if (id) props.onCreated(id)
     } else {
       if (!areaId) return
-      const id = addProject(name.trim(), areaId)
-      props.onCreated(id)
+      const id = await addProject(name.trim(), areaId)
+      if (id) props.onCreated(id)
     }
   }
 

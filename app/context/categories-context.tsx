@@ -1,15 +1,11 @@
 // app/context/categories-context.tsx
 'use client'
 
-import { createContext, useContext, useState, ReactNode } from 'react'
-
-export type Area = { id: string; name: string; color: AreaColorId }
-export type Project = { id: string; name: string; areaId: string }
+import { createContext, useContext, useState, useEffect, ReactNode } from 'react'
+import { createClient } from '@/lib/supabase/client'
 
 export type AreaColorId = 'chart-1' | 'chart-2' | 'chart-3' | 'chart-4' | 'chart-5' | 'primary' | 'destructive'
 
-// Paleta cerrada, usa los mismos tokens de tu tema (globals.css) — así
-// funciona igual en modo claro y oscuro sin definir colores nuevos.
 export const AREA_COLOR_PALETTE: { id: AreaColorId; label: string; dot: string }[] = [
   { id: 'chart-1', label: 'Azul', dot: 'bg-chart-1' },
   { id: 'chart-2', label: 'Turquesa', dot: 'bg-chart-2' },
@@ -20,32 +16,16 @@ export const AREA_COLOR_PALETTE: { id: AreaColorId; label: string; dot: string }
   { id: 'destructive', label: 'Rojo', dot: 'bg-destructive' },
 ]
 
-export const SEED_AREA_UNIVERSITY = 'area-university'
-export const SEED_AREA_WORK = 'area-work'
-export const SEED_AREA_GENERAL = 'area-general'
-export const SEED_PROJECT_TFG = 'project-tfg'
-export const SEED_PROJECT_AUTOMATION = 'project-automation'
-
-const initialAreas: Area[] = [
-  { id: SEED_AREA_UNIVERSITY, name: 'University', color: 'chart-1' },
-  { id: SEED_AREA_WORK, name: 'Work', color: 'chart-2' },
-  { id: SEED_AREA_GENERAL, name: 'General', color: 'chart-4' },
-]
-
-const initialProjects: Project[] = [
-  { id: SEED_PROJECT_TFG, name: 'TFG', areaId: SEED_AREA_UNIVERSITY },
-  { id: SEED_PROJECT_AUTOMATION, name: 'Automation', areaId: SEED_AREA_WORK },
-]
+export type Area = { id: string; name: string; color: AreaColorId }
+export type Project = { id: string; name: string; areaId: string }
 
 type CategoriesContextType = {
   areas: Area[]
   projects: Project[]
-  addArea: (name: string, color?: AreaColorId) => string
-  renameArea: (id: string, name: string) => void
-  setAreaColor: (id: string, color: AreaColorId) => void
+  loading: boolean
+  addArea: (name: string, color?: AreaColorId) => Promise<string>
   deleteArea: (id: string) => void
-  addProject: (name: string, areaId: string) => string
-  renameProject: (id: string, name: string) => void
+  addProject: (name: string, areaId: string) => Promise<string>
   deleteProject: (id: string) => void
   projectsForArea: (areaId: string) => Project[]
   getAreaName: (id: string | null) => string
@@ -56,52 +36,81 @@ type CategoriesContextType = {
 const CategoriesContext = createContext<CategoriesContextType | null>(null)
 
 export function CategoriesProvider({ children }: { children: ReactNode }) {
-  const [areas, setAreas] = useState<Area[]>(initialAreas)
-  const [projects, setProjects] = useState<Project[]>(initialProjects)
+  const supabase = createClient()
+  const [areas, setAreas] = useState<Area[]>([])
+  const [projects, setProjects] = useState<Project[]>([])
+  const [loading, setLoading] = useState(true)
 
-  const addArea = (name: string, color?: AreaColorId) => {
-    const id = crypto.randomUUID()
-    // Si no se elige color, rota la paleta según cuántas áreas hay ya,
-    // para que áreas nuevas no salgan siempre del mismo color por defecto.
+  useEffect(() => {
+    async function load() {
+      const { data: areaRows } = await supabase.from('areas').select('*').order('created_at')
+      const { data: projectRows } = await supabase.from('projects').select('*').order('created_at')
+
+      setAreas((areaRows ?? []).map((r) => ({ id: r.id, name: r.name, color: r.color as AreaColorId })))
+      setProjects((projectRows ?? []).map((r) => ({ id: r.id, name: r.name, areaId: r.area_id })))
+      setLoading(false)
+    }
+    load()
+
+    const channel = supabase
+      .channel('categories-changes')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'areas' }, load)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'projects' }, load)
+      .subscribe()
+
+    return () => {
+      supabase.removeChannel(channel)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  const addArea = async (name: string, color?: AreaColorId) => {
+    const { data: userData } = await supabase.auth.getUser()
     const assignedColor = color ?? AREA_COLOR_PALETTE[areas.length % AREA_COLOR_PALETTE.length].id
-    setAreas((prev) => [...prev, { id, name, color: assignedColor }])
-    return id
+
+    const { data } = await supabase
+      .from('areas')
+      .insert({ name, color: assignedColor, user_id: userData.user?.id })
+      .select()
+      .single()
+
+    if (data) {
+      setAreas((prev) => [...prev, { id: data.id, name: data.name, color: data.color }])
+      return data.id as string
+    }
+    return ''
   }
 
-  const renameArea = (id: string, name: string) => {
-    setAreas((prev) => prev.map((a) => (a.id === id ? { ...a, name } : a)))
-  }
-
-  const setAreaColor = (id: string, color: AreaColorId) => {
-    setAreas((prev) => prev.map((a) => (a.id === id ? { ...a, color } : a)))
-  }
-
-  const deleteArea = (id: string) => {
+  const deleteArea = async (id: string) => {
     setAreas((prev) => prev.filter((a) => a.id !== id))
     setProjects((prev) => prev.filter((p) => p.areaId !== id))
+    await supabase.from('areas').delete().eq('id', id)
   }
 
-  const addProject = (name: string, areaId: string) => {
-    const id = crypto.randomUUID()
-    setProjects((prev) => [...prev, { id, name, areaId }])
-    return id
+  const addProject = async (name: string, areaId: string) => {
+    const { data: userData } = await supabase.auth.getUser()
+    const { data } = await supabase
+      .from('projects')
+      .insert({ name, area_id: areaId, user_id: userData.user?.id })
+      .select()
+      .single()
+
+    if (data) {
+      setProjects((prev) => [...prev, { id: data.id, name: data.name, areaId: data.area_id }])
+      return data.id as string
+    }
+    return ''
   }
 
-  const renameProject = (id: string, name: string) => {
-    setProjects((prev) => prev.map((p) => (p.id === id ? { ...p, name } : p)))
-  }
-
-  const deleteProject = (id: string) => {
+  const deleteProject = async (id: string) => {
     setProjects((prev) => prev.filter((p) => p.id !== id))
+    await supabase.from('projects').delete().eq('id', id)
   }
 
   const projectsForArea = (areaId: string) => projects.filter((p) => p.areaId === areaId)
-
   const getAreaName = (id: string | null) => areas.find((a) => a.id === id)?.name ?? '—'
   const getProjectName = (id: string | null) => projects.find((p) => p.id === id)?.name ?? '—'
 
-  // Único punto de la app que resuelve "areaId → clase de color".
-  // Tasks, Planner y Notes llaman a esto, nunca inventan su propio color.
   const getAreaColorDot = (id: string | null) => {
     const area = areas.find((a) => a.id === id)
     const colorId = area?.color ?? 'chart-1'
@@ -113,12 +122,10 @@ export function CategoriesProvider({ children }: { children: ReactNode }) {
       value={{
         areas,
         projects,
+        loading,
         addArea,
-        renameArea,
-        setAreaColor,
         deleteArea,
         addProject,
-        renameProject,
         deleteProject,
         projectsForArea,
         getAreaName,
