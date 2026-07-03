@@ -16,6 +16,7 @@ import {
 import { useTasksContext, Task } from './context/tasks-context'
 import { useCategoriesContext } from './context/categories-context'
 import { usePlannerContext } from './context/planner-context'
+import { useRemindersContext } from './context/reminders-context'
 import { TaskDetailPanel } from './task-detail-panel'
 
 function getGreeting() {
@@ -93,49 +94,23 @@ const priorityBar: Record<Task['priority'], string> = {
   high: 'bg-destructive',
 }
 
-type Reminder = {
-  id: string
-  text: string
-  done: boolean
-}
-
 export default function OverviewPage() {
   const { tasks, setSelectedTaskId } = useTasksContext()
   const { getAreaName, getProjectName, getAreaColorDot } = useCategoriesContext()
   const { getEventsForDate } = usePlannerContext()
+  const { reminders, addReminder, toggleReminder, deleteReminder, loading: remindersLoading } =
+    useRemindersContext()
+
+  const [newReminder, setNewReminder] = useState('')
 
   const today = todayISO()
 
-  // =========================
-  // RECORDATORIOS
-  // =========================
-  const [reminders, setReminders] = useState<Reminder[]>([])
-  const [newReminder, setNewReminder] = useState('')
-
-  const addReminder = (e: React.FormEvent) => {
+  const addReminderSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     const value = newReminder.trim()
     if (!value) return
-
-    setReminders((prev) => [
-      {
-        id: crypto.randomUUID(),
-        text: value,
-        done: false,
-      },
-      ...prev,
-    ])
+    await addReminder(value)
     setNewReminder('')
-  }
-
-  const toggleReminder = (id: string) => {
-    setReminders((prev) =>
-      prev.map((r) => (r.id === id ? { ...r, done: !r.done } : r))
-    )
-  }
-
-  const deleteReminder = (id: string) => {
-    setReminders((prev) => prev.filter((r) => r.id !== id))
   }
 
   // =========================
@@ -162,6 +137,7 @@ export default function OverviewPage() {
     medium: tasks.filter((t) => t.priority === 'medium').length,
     low: tasks.filter((t) => t.priority === 'low').length,
   }
+
   const maxPriority = Math.max(1, ...Object.values(byPriority))
 
   const byArea = tasks.reduce<Record<string, number>>((acc, t) => {
@@ -169,10 +145,11 @@ export default function OverviewPage() {
     acc[key] = (acc[key] ?? 0) + 1
     return acc
   }, {})
+
   const maxArea = Math.max(1, ...Object.values(byArea))
 
   // =========================
-  // ESTA SEMANA
+  // PLANNER / SEMANA
   // =========================
   const weekStart = startOfWeek(new Date())
   const weekDayLabels = ['Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb', 'Dom']
@@ -186,12 +163,11 @@ export default function OverviewPage() {
       const dayTasks = tasks
         .filter((t) => t.dueDate === iso)
         .sort((a, b) => {
-          const pa = a.priority === 'high' ? 0 : a.priority === 'medium' ? 1 : 2
-          const pb = b.priority === 'high' ? 0 : b.priority === 'medium' ? 1 : 2
-          return pa - pb
+          const order = { high: 0, medium: 1, low: 2 }
+          return order[a.priority] - order[b.priority]
         })
 
-      const dayEvents = getEventsForDate(iso)
+      const dayEvents = getEventsForDate(iso).sort((a, b) => a.time.localeCompare(b.time))
 
       return {
         iso,
@@ -202,7 +178,7 @@ export default function OverviewPage() {
         events: dayEvents,
       }
     })
-  }, [tasks, getEventsForDate, today, weekStart])
+  }, [tasks, getEventsForDate, today])
 
   const maxWeekCount = Math.max(1, ...weekDays.map((d) => d.count))
 
@@ -237,7 +213,7 @@ export default function OverviewPage() {
         </div>
       </div>
 
-      {/* RECORDATORIOS - justo debajo de Overview */}
+      {/* RECORDATORIOS */}
       <section className="space-y-4">
         <div className="flex items-center gap-2">
           <ListChecks className="w-5 h-5 text-foreground" />
@@ -245,7 +221,7 @@ export default function OverviewPage() {
         </div>
 
         <div className="bg-card border border-border rounded-xl p-4 space-y-4">
-          <form onSubmit={addReminder} className="flex gap-2">
+          <form onSubmit={addReminderSubmit} className="flex gap-2">
             <input
               value={newReminder}
               onChange={(e) => setNewReminder(e.target.value)}
@@ -261,7 +237,9 @@ export default function OverviewPage() {
             </button>
           </form>
 
-          {reminders.length === 0 ? (
+          {remindersLoading ? (
+            <p className="text-xs text-muted-foreground/60">Cargando recordatorios...</p>
+          ) : reminders.length === 0 ? (
             <p className="text-xs text-muted-foreground/60">
               No tienes recordatorios todavía
             </p>
@@ -301,97 +279,17 @@ export default function OverviewPage() {
         </div>
       </section>
 
-      {/* ESTA SEMANA */}
+      {/* RESUMEN SEMANAL + ESTA SEMANA */}
       <section className="space-y-4">
         <div className="flex items-center gap-2">
           <CalendarClock className="w-5 h-5 text-foreground" />
-          <h2 className="text-lg font-semibold text-foreground">Esta semana</h2>
+          <h2 className="text-lg font-semibold text-foreground">Planner</h2>
         </div>
 
-        {/* BLOQUES POR DÍA - primero */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          {weekDays.map((day) => {
-            const hasTasks = day.tasks.length > 0
-            const hasEvents = day.events.length > 0
-
-            return (
-              <div
-                key={day.iso}
-                className={`bg-card border rounded-xl p-4 space-y-3 ${
-                  day.isToday ? 'border-primary/40' : 'border-border'
-                }`}
-              >
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="text-sm font-medium text-foreground capitalize">
-                      {formatDateLabel(day.iso)}
-                    </p>
-                    <p className="text-xs text-muted-foreground">
-                      {day.tasks.length} tareas · {day.events.length} eventos
-                    </p>
-                  </div>
-
-                  {day.isToday && (
-                    <span className="text-[11px] px-2 py-1 rounded-full bg-primary/10 text-primary font-medium">
-                      Hoy
-                    </span>
-                  )}
-                </div>
-
-                {!hasTasks && !hasEvents && (
-                  <p className="text-xs text-muted-foreground/60">Nada programado</p>
-                )}
-
-                {hasEvents && (
-                  <div className="space-y-2">
-                    <p className="text-xs font-medium text-muted-foreground">Agenda</p>
-                    {day.events.map((event) => (
-                      <div
-                        key={event.id}
-                        className="flex items-center gap-2 rounded-lg border border-border p-2 bg-accent/40"
-                      >
-                        <span className="text-xs text-muted-foreground w-14 shrink-0">
-                          {event.time}
-                        </span>
-                        <span className="text-sm text-accent-foreground truncate">
-                          {event.title}
-                        </span>
-                      </div>
-                    ))}
-                  </div>
-                )}
-
-                {hasTasks && (
-                  <div className="space-y-2">
-                    <p className="text-xs font-medium text-muted-foreground">Tareas</p>
-                    {day.tasks.map((task) => (
-                      <button
-                        key={task.id}
-                        onClick={() => setSelectedTaskId(task.id)}
-                        className="w-full flex items-start gap-2 rounded-lg border border-border p-2 hover:bg-muted/50 text-left"
-                      >
-                        <span
-                          className={`w-1.5 h-1.5 rounded-full shrink-0 mt-2 ${priorityBar[task.priority]}`}
-                        />
-                        <div className="min-w-0 flex-1">
-                          <p className="text-sm text-foreground truncate">{task.title}</p>
-                          <p className="text-xs text-muted-foreground truncate">
-                            {getAreaName(task.areaId)} · {getProjectName(task.projectId)}
-                          </p>
-                        </div>
-                      </button>
-                    ))}
-                  </div>
-                )}
-              </div>
-            )
-          })}
-        </div>
-
-        {/* RESUMEN SEMANAL - debajo de los días, dentro de la misma sección */}
-        <div className="bg-card border border-border rounded-xl p-4 space-y-3">
+        <div className="bg-card border border-border rounded-xl p-4 space-y-4">
           <p className="text-sm font-medium text-foreground flex items-center gap-1.5">
-            <BarChart3 className="w-4 h-4" /> Resumen semanal
+            <BarChart3 className="w-4 h-4" />
+            Resumen semanal
           </p>
 
           <div className="flex items-end justify-between gap-2 h-24">
@@ -421,167 +319,232 @@ export default function OverviewPage() {
             <span>{weekCompleted} completadas</span>
             <span>{weekPending} pendientes</span>
           </div>
+
+          <div className="pt-2 border-t border-border space-y-3">
+            <p className="text-sm font-medium text-foreground">Esta semana</p>
+
+            {weekDays.every((day) => day.tasks.length === 0 && day.events.length === 0) ? (
+              <p className="text-xs text-muted-foreground/60">
+                No hay nada planificado esta semana
+              </p>
+            ) : (
+              <div className="space-y-3">
+                {weekDays.map((day) => {
+                  if (day.tasks.length === 0 && day.events.length === 0) return null
+
+                  return (
+                    <div key={day.iso} className="rounded-xl border border-border p-3 space-y-2">
+                      <div className="flex items-center justify-between">
+                        <p className="text-sm font-medium text-foreground capitalize">
+                          {formatDateLabel(day.iso)}
+                        </p>
+                        <span className="text-xs text-muted-foreground">
+                          {day.tasks.length + day.events.length} items
+                        </span>
+                      </div>
+
+                      {day.events.map((event) => (
+                        <div
+                          key={event.id}
+                          className="flex items-center gap-2 rounded-lg bg-accent/40 border border-border px-3 py-2"
+                        >
+                          <CalendarClock className="w-3.5 h-3.5 shrink-0 text-accent-foreground" />
+                          <div className="min-w-0">
+                            <p className="text-xs text-accent-foreground font-medium">
+                              {event.time}
+                            </p>
+                            <p className="text-sm text-foreground truncate">{event.title}</p>
+                          </div>
+                        </div>
+                      ))}
+
+                      {day.tasks.map((task) => (
+                        <button
+                          key={task.id}
+                          onClick={() => setSelectedTaskId(task.id)}
+                          className="w-full text-left rounded-lg border border-border px-3 py-2 hover:bg-muted/50 transition"
+                        >
+                          <div className="flex items-center gap-2">
+                            <span
+                              className={`w-2 h-2 rounded-full shrink-0 ${priorityBar[task.priority]}`}
+                            />
+                            <p className="text-sm font-medium text-foreground truncate">
+                              {task.title}
+                            </p>
+                          </div>
+                          <p className="text-xs text-muted-foreground mt-1">
+                            {getAreaName(task.areaId)}
+                            {task.projectId ? ` · ${getProjectName(task.projectId)}` : ''}
+                          </p>
+                        </button>
+                      ))}
+                    </div>
+                  )
+                })}
+              </div>
+            )}
+          </div>
         </div>
       </section>
 
-      {/* TAREAS - al final, manteniendo stats dentro */}
+      {/* ESTADÍSTICA */}
+      <section className="space-y-4">
+        <div className="flex items-center gap-2">
+          <BarChart3 className="w-5 h-5 text-foreground" />
+          <h2 className="text-lg font-semibold text-foreground">Estadística</h2>
+        </div>
+
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+          <div className="bg-card border border-border rounded-xl p-4 space-y-4">
+            <p className="text-sm font-medium text-foreground">Resumen general</p>
+
+            <div className="grid grid-cols-2 gap-3">
+              <div className="rounded-lg bg-muted/40 p-3">
+                <p className="text-xs text-muted-foreground">Total</p>
+                <p className="text-xl font-semibold text-foreground mt-1">{total}</p>
+              </div>
+              <div className="rounded-lg bg-muted/40 p-3">
+                <p className="text-xs text-muted-foreground">Completadas</p>
+                <p className="text-xl font-semibold text-foreground mt-1">{done}</p>
+              </div>
+              <div className="rounded-lg bg-muted/40 p-3">
+                <p className="text-xs text-muted-foreground">Pendientes</p>
+                <p className="text-xl font-semibold text-foreground mt-1">{pending}</p>
+              </div>
+              <div className="rounded-lg bg-muted/40 p-3">
+                <p className="text-xs text-muted-foreground">Vencidas</p>
+                <p className="text-xl font-semibold text-destructive mt-1">{overdue.length}</p>
+              </div>
+            </div>
+          </div>
+
+          <div className="bg-card border border-border rounded-xl p-4 space-y-4">
+            <p className="text-sm font-medium text-foreground">Por prioridad</p>
+            <div className="space-y-3">
+              {(['high', 'medium', 'low'] as const).map((level) => (
+                <div key={level} className="space-y-1">
+                  <div className="flex items-center justify-between text-xs">
+                    <span className="capitalize text-foreground">{level}</span>
+                    <span className="text-muted-foreground">{byPriority[level]}</span>
+                  </div>
+                  <div className="h-2 rounded-full bg-muted overflow-hidden">
+                    <div
+                      className={`h-full rounded-full ${
+                        level === 'high'
+                          ? 'bg-destructive'
+                          : level === 'medium'
+                            ? 'bg-chart-4'
+                            : 'bg-muted-foreground/40'
+                      }`}
+                      style={{
+                        width: `${(byPriority[level] / maxPriority) * 100}%`,
+                      }}
+                    />
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          <div className="bg-card border border-border rounded-xl p-4 space-y-4 lg:col-span-2">
+            <p className="text-sm font-medium text-foreground">Por área</p>
+            <div className="space-y-3">
+              {Object.entries(byArea).length === 0 ? (
+                <p className="text-xs text-muted-foreground/60">No hay tareas todavía</p>
+              ) : (
+                Object.entries(byArea).map(([areaId, count]) => (
+                  <div key={areaId} className="space-y-1">
+                    <div className="flex items-center justify-between text-xs">
+                      <div className="flex items-center gap-2">
+                        <span className={`w-2 h-2 rounded-full ${getAreaColorDot(areaId)}`} />
+                        <span className="text-foreground">{getAreaName(areaId)}</span>
+                      </div>
+                      <span className="text-muted-foreground">{count}</span>
+                    </div>
+                    <div className="h-2 rounded-full bg-muted overflow-hidden">
+                      <div
+                        className="h-full rounded-full bg-primary"
+                        style={{ width: `${(count / maxArea) * 100}%` }}
+                      />
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* TAREAS */}
       <section className="space-y-6">
         <div className="flex items-center gap-2">
           <ListTodo className="w-5 h-5 text-foreground" />
           <h2 className="text-lg font-semibold text-foreground">Tareas</h2>
         </div>
 
-        {/* HOY */}
-        <div className="bg-card border border-border rounded-xl p-4 space-y-3">
-          <p className="text-sm font-medium text-foreground flex items-center gap-1.5">
-            <ListTodo className="w-4 h-4" /> Hoy
-          </p>
-
-          {dueToday.length === 0 && (
-            <p className="text-xs text-muted-foreground/60">No tienes tareas para hoy</p>
-          )}
-
-          {dueToday.length > 0 && (
-            <div className="space-y-1.5">
-              {dueToday.map((task) => (
-                <button
-                  key={task.id}
-                  onClick={() => setSelectedTaskId(task.id)}
-                  className="w-full flex items-center gap-2 rounded-lg border border-border p-2 hover:bg-muted/50 text-left"
-                >
-                  <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${priorityBar[task.priority]}`} />
-                  <span className="flex-1 text-sm text-foreground truncate">{task.title}</span>
-                </button>
-              ))}
-            </div>
-          )}
-        </div>
-
-        {/* STAT CARDS */}
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-          <div className="bg-card border border-border rounded-xl p-4">
-            <p className="text-xs text-muted-foreground">Total</p>
-            <p className="text-xl font-semibold text-foreground mt-1">{total}</p>
-          </div>
-          <div className="bg-card border border-border rounded-xl p-4">
-            <p className="text-xs text-muted-foreground flex items-center gap-1">
-              <CheckCircle2 className="w-3.5 h-3.5" /> Completadas
-            </p>
-            <p className="text-xl font-semibold text-foreground mt-1">{done}</p>
-          </div>
-          <div className="bg-card border border-border rounded-xl p-4">
-            <p className="text-xs text-muted-foreground flex items-center gap-1">
-              <Clock3 className="w-3.5 h-3.5" /> Pendientes
-            </p>
-            <p className="text-xl font-semibold text-foreground mt-1">{pending}</p>
-          </div>
-          <div className="bg-card border border-border rounded-xl p-4">
-            <p className="text-xs text-muted-foreground flex items-center gap-1">
-              <AlertTriangle className="w-3.5 h-3.5" /> Vencidas
-            </p>
-            <p className={`text-xl font-semibold mt-1 ${overdue.length > 0 ? 'text-destructive' : 'text-foreground'}`}>
-              {overdue.length}
-            </p>
-          </div>
-        </div>
-
-        {/* PRIORIDAD + ÁREA */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
+          {/* HOY */}
           <div className="bg-card border border-border rounded-xl p-4 space-y-3">
-            <p className="text-sm font-medium text-foreground">Por prioridad</p>
-            {(['high', 'medium', 'low'] as const).map((p) => (
-              <div key={p} className="flex items-center gap-3">
-                <span className="text-xs w-16 capitalize text-muted-foreground">{p}</span>
-                <div className="flex-1 h-2 bg-muted rounded-full overflow-hidden">
-                  <div
-                    className={`h-full ${priorityBar[p]}`}
-                    style={{ width: `${(byPriority[p] / maxPriority) * 100}%` }}
-                  />
-                </div>
-                <span className="text-xs text-muted-foreground w-4 text-right">{byPriority[p]}</span>
-              </div>
-            ))}
-          </div>
+            <p className="text-sm font-medium text-foreground flex items-center gap-1.5">
+              <ListTodo className="w-4 h-4" />
+              Hoy
+            </p>
 
-          <div className="bg-card border border-border rounded-xl p-4 space-y-3">
-            <p className="text-sm font-medium text-foreground">Por área</p>
-            {Object.entries(byArea).map(([areaId, count]) => (
-              <div key={areaId} className="flex items-center gap-3">
-                <span className="text-xs w-20 truncate text-muted-foreground">
-                  {getAreaName(areaId)}
-                </span>
-                <div className="flex-1 h-2 bg-muted rounded-full overflow-hidden">
-                  <div
-                    className={`h-full ${getAreaColorDot(areaId || null)}`}
-                    style={{ width: `${(count / maxArea) * 100}%` }}
-                  />
-                </div>
-                <span className="text-xs text-muted-foreground w-4 text-right">{count}</span>
+            {dueToday.length === 0 ? (
+              <p className="text-xs text-muted-foreground/60">No tienes tareas para hoy</p>
+            ) : (
+              <div className="space-y-2">
+                {dueToday.map((task) => (
+                  <button
+                    key={task.id}
+                    onClick={() => setSelectedTaskId(task.id)}
+                    className="w-full text-left rounded-lg border border-border px-3 py-2 hover:bg-muted/50 transition"
+                  >
+                    <div className="flex items-center gap-2">
+                      <span className={`w-2 h-2 rounded-full shrink-0 ${priorityBar[task.priority]}`} />
+                      <p className="text-sm font-medium text-foreground truncate">{task.title}</p>
+                    </div>
+                    <p className="text-xs text-muted-foreground mt-1">
+                      {getAreaName(task.areaId)}
+                      {task.projectId ? ` · ${getProjectName(task.projectId)}` : ''}
+                    </p>
+                  </button>
+                ))}
               </div>
-            ))}
-            {Object.keys(byArea).length === 0 && (
-              <p className="text-xs text-muted-foreground/60">Sin datos todavía</p>
             )}
           </div>
-        </div>
 
-        {/* VENCIDAS */}
-        {overdue.length > 0 && (
-          <div className="border border-destructive/30 bg-destructive/5 rounded-xl divide-y divide-destructive/10">
-            <div className="px-4 py-3 flex items-center gap-2">
-              <AlertTriangle className="w-4 h-4 text-destructive" />
-              <p className="text-sm font-medium text-destructive">Necesitan atención</p>
-            </div>
-            {overdue.map((task) => (
-              <button
-                key={task.id}
-                onClick={() => setSelectedTaskId(task.id)}
-                className="w-full flex items-center justify-between px-4 py-3 hover:bg-destructive/5 text-left"
-              >
-                <div>
-                  <p className="text-sm font-medium text-foreground">{task.title}</p>
-                  <p className="text-xs text-muted-foreground">
-                    {getAreaName(task.areaId)} · {getProjectName(task.projectId)}
-                  </p>
-                </div>
-                <span className="text-xs text-destructive font-medium">
-                  {formatShortDate(task.dueDate!)}
-                </span>
-              </button>
-            ))}
-          </div>
-        )}
-
-        {/* PRÓXIMAS TAREAS */}
-        <div className="bg-card border border-border rounded-xl divide-y divide-border">
-          <div className="px-4 py-3">
-            <p className="text-sm font-medium text-foreground">Próximas tareas</p>
-          </div>
-          {upcoming.length === 0 && (
-            <p className="text-xs text-muted-foreground/60 text-center py-6">
-              No hay tareas próximas
+          {/* PRÓXIMAS */}
+          <div className="bg-card border border-border rounded-xl p-4 space-y-3">
+            <p className="text-sm font-medium text-foreground flex items-center gap-1.5">
+              <Clock3 className="w-4 h-4" />
+              Próximas
             </p>
-          )}
-          {upcoming.map((task) => (
-            <button
-              key={task.id}
-              onClick={() => setSelectedTaskId(task.id)}
-              className="w-full flex items-center justify-between px-4 py-3 hover:bg-muted/50 text-left"
-            >
-              <div className="flex items-center gap-3">
-                <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${priorityBar[task.priority]}`} />
-                <div>
-                  <p className="text-sm font-medium text-foreground">{task.title}</p>
-                  <p className="text-xs text-muted-foreground">
-                    {getAreaName(task.areaId)} · {getProjectName(task.projectId)}
-                  </p>
-                </div>
+
+            {upcoming.length === 0 ? (
+              <p className="text-xs text-muted-foreground/60">No hay próximas tareas</p>
+            ) : (
+              <div className="space-y-2">
+                {upcoming.map((task) => (
+                  <button
+                    key={task.id}
+                    onClick={() => setSelectedTaskId(task.id)}
+                    className="w-full text-left rounded-lg border border-border px-3 py-2 hover:bg-muted/50 transition"
+                  >
+                    <div className="flex items-center gap-2">
+                      <span className={`w-2 h-2 rounded-full shrink-0 ${priorityBar[task.priority]}`} />
+                      <p className="text-sm font-medium text-foreground truncate">{task.title}</p>
+                    </div>
+                    <p className="text-xs text-muted-foreground mt-1">
+                      {task.dueDate ? formatShortDate(task.dueDate) : 'Sin fecha'} ·{' '}
+                      {getAreaName(task.areaId)}
+                      {task.projectId ? ` · ${getProjectName(task.projectId)}` : ''}
+                    </p>
+                  </button>
+                ))}
               </div>
-              <span className="text-xs text-muted-foreground">
-                {formatShortDate(task.dueDate!)}
-              </span>
-            </button>
-          ))}
+            )}
+          </div>
         </div>
       </section>
 

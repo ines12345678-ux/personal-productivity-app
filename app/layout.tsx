@@ -1,6 +1,6 @@
 // app/layout.tsx
-// añade esta línea cerca del principio de app/layout.tsx, junto a los otros exports
 export const dynamic = 'force-dynamic'
+
 import type { Metadata, Viewport } from 'next'
 import { Analytics } from '@vercel/analytics/next'
 import { Geist, Geist_Mono } from 'next/font/google'
@@ -10,6 +10,7 @@ import { CategoriesProvider } from './context/categories-context'
 import { TasksProvider } from './context/tasks-context'
 import { NotesProvider } from './context/notes-context'
 import { PlannerProvider } from './context/planner-context'
+import { RemindersProvider } from './context/reminders-context'
 
 import './globals.css'
 
@@ -70,7 +71,9 @@ export default function RootLayout({
           <TasksProvider>
             <NotesProvider>
               <PlannerProvider>
-                <AppShell>{children}</AppShell>
+                <RemindersProvider>
+                  <AppShell>{children}</AppShell>
+                </RemindersProvider>
               </PlannerProvider>
             </NotesProvider>
           </TasksProvider>
