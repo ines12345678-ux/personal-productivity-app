@@ -18,8 +18,6 @@ import { CreateCategoryDialog } from '../create-category-dialog'
 const NO_AREA_KEY = '__none__'
 const CREATE_NEW = '__create_new__'
 
-// El contenido ahora se guarda como HTML simple (<ul><li>, <s>).
-// Para el preview de la lista lateral, quitamos las etiquetas.
 function stripHtml(html: string) {
   return html.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim()
 }
@@ -33,6 +31,7 @@ export default function NotesPage() {
   const [showAreaDialog, setShowAreaDialog] = useState(false)
 
   const contentRef = useRef<HTMLDivElement>(null)
+  const saveTimeout = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   useEffect(() => {
     if (!selectedNoteId && notes.length > 0) {
@@ -42,6 +41,16 @@ export default function NotesPage() {
   }, [notes])
 
   const selectedNote = notes.find((n) => n.id === selectedNoteId) ?? null
+
+  // CLAVE: el HTML del editor se coloca UNA sola vez al cambiar de nota,
+  // nunca en cada tecla. Así el navegador gestiona el cursor con
+  // normalidad mientras escribes, en vez de que React lo resetee.
+  useEffect(() => {
+    if (contentRef.current) {
+      contentRef.current.innerHTML = selectedNote?.content ?? ''
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedNote?.id])
 
   const grouped = useMemo(() => {
     const groups: Record<string, Note[]> = {}
@@ -78,9 +87,16 @@ export default function NotesPage() {
     updateNote(selectedNote.id, { areaId: value || null })
   }
 
+  // Guarda con un pequeño retraso tras dejar de escribir, en vez de
+  // en cada tecla — evita disparar una escritura a Supabase por letra.
   const handleContentInput = () => {
     if (!selectedNote || !contentRef.current) return
-    updateNote(selectedNote.id, { content: contentRef.current.innerHTML })
+    const html = contentRef.current.innerHTML
+
+    if (saveTimeout.current) clearTimeout(saveTimeout.current)
+    saveTimeout.current = setTimeout(() => {
+      updateNote(selectedNote.id, { content: html })
+    }, 400)
   }
 
   const applyBulletList = () => {
@@ -196,7 +212,6 @@ export default function NotesPage() {
                 </button>
               </div>
 
-              {/* Barra de formato */}
               <div className="flex items-center gap-1 border-b border-border pb-2">
                 <button
                   type="button"
@@ -218,15 +233,14 @@ export default function NotesPage() {
                 </button>
               </div>
 
-              {/* key={selectedNote.id} fuerza remontar el editor al cambiar
-                  de nota, así el contenido no se mezcla entre notas */}
+              {/* Sin dangerouslySetInnerHTML aquí — el contenido se
+                  coloca de forma imperativa en el useEffect de arriba,
+                  no en cada render. */}
               <div
-                key={selectedNote.id}
                 ref={contentRef}
                 contentEditable
                 suppressContentEditableWarning
                 onInput={handleContentInput}
-                dangerouslySetInnerHTML={{ __html: selectedNote.content }}
                 data-placeholder="Escribe aquí..."
                 className="flex-1 outline-none text-sm leading-relaxed bg-transparent text-foreground overflow-y-auto
                   empty:before:content-[attr(data-placeholder)] empty:before:text-muted-foreground/60
