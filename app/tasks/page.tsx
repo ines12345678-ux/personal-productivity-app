@@ -2,7 +2,7 @@
 'use client'
 
 import { useState } from 'react'
-import { CheckCircle2, Plus } from 'lucide-react'
+import { CheckCircle2, Plus, Settings2 } from 'lucide-react'
 import {
   DndContext,
   DragEndEvent,
@@ -24,6 +24,7 @@ import { CSS } from '@dnd-kit/utilities'
 import { useTasksContext, Task } from '../context/tasks-context'
 import { useCategoriesContext } from '../context/categories-context'
 import { TaskDetailPanel } from '../task-detail-panel'
+import { ManageCategoriesDialog } from '../manage-categories-dialog'
 
 const columns: { key: Task['status']; label: string }[] = [
   { key: 'todo', label: 'To Do' },
@@ -157,6 +158,7 @@ export default function TasksPage() {
   const [isCreating, setIsCreating] = useState(false)
   const [newTaskTitle, setNewTaskTitle] = useState('')
   const [activeTask, setActiveTask] = useState<Task | null>(null)
+  const [isManagingCategories, setIsManagingCategories] = useState(false)
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 4 } })
@@ -206,37 +208,47 @@ export default function TasksPage() {
           <p className="text-sm text-muted-foreground">Your unified task system</p>
         </div>
 
-        {isCreating ? (
-          <form
-            onSubmit={(e) => {
-              e.preventDefault()
-              addTask(newTaskTitle)
-              setNewTaskTitle('')
-              setIsCreating(false)
-            }}
-            className="flex items-center gap-2"
-          >
-            <input
-              autoFocus
-              value={newTaskTitle}
-              onChange={(e) => setNewTaskTitle(e.target.value)}
-              onBlur={() => !newTaskTitle && setIsCreating(false)}
-              placeholder="Título de la tarea..."
-              className="border border-border rounded-md px-3 py-2 text-sm bg-background"
-            />
-            <button type="submit" className="px-3 py-2 rounded-md bg-primary text-primary-foreground text-sm">
-              Crear
-            </button>
-          </form>
-        ) : (
+        <div className="flex items-center gap-2">
           <button
-            onClick={() => setIsCreating(true)}
-            className="flex items-center gap-2 px-3 py-2 rounded-md bg-primary text-primary-foreground"
+            onClick={() => setIsManagingCategories(true)}
+            className="flex items-center gap-2 px-3 py-2 rounded-md border border-border hover:bg-muted/50 text-sm text-muted-foreground"
           >
-            <Plus className="w-4 h-4" />
-            New Task
+            <Settings2 className="w-4 h-4" />
+            Categorías
           </button>
-        )}
+
+          {isCreating ? (
+            <form
+              onSubmit={(e) => {
+                e.preventDefault()
+                addTask(newTaskTitle)
+                setNewTaskTitle('')
+                setIsCreating(false)
+              }}
+              className="flex items-center gap-2"
+            >
+              <input
+                autoFocus
+                value={newTaskTitle}
+                onChange={(e) => setNewTaskTitle(e.target.value)}
+                onBlur={() => !newTaskTitle && setIsCreating(false)}
+                placeholder="Título de la tarea..."
+                className="border border-border rounded-md px-3 py-2 text-sm bg-background"
+              />
+              <button type="submit" className="px-3 py-2 rounded-md bg-primary text-primary-foreground text-sm">
+                Crear
+              </button>
+            </form>
+          ) : (
+            <button
+              onClick={() => setIsCreating(true)}
+              className="flex items-center gap-2 px-3 py-2 rounded-md bg-primary text-primary-foreground"
+            >
+              <Plus className="w-4 h-4" />
+              New Task
+            </button>
+          )}
+        </div>
       </div>
 
       <DndContext
@@ -268,6 +280,7 @@ export default function TasksPage() {
       </DndContext>
 
       <TaskDetailPanel />
+      <ManageCategoriesDialog open={isManagingCategories} onClose={() => setIsManagingCategories(false)} />
     </div>
   )
 }

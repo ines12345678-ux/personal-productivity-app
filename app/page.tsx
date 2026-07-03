@@ -53,7 +53,7 @@ const priorityBar: Record<Task['priority'], string> = {
 
 export default function OverviewPage() {
   const { tasks, setSelectedTaskId } = useTasksContext()
-  const { getAreaName, getProjectName } = useCategoriesContext()
+  const { getAreaName, getProjectName, getAreaColorDot } = useCategoriesContext()
 
   const today = todayISO()
   const total = tasks.length
@@ -166,7 +166,10 @@ export default function OverviewPage() {
             <div key={areaId} className="flex items-center gap-3">
               <span className="text-xs w-20 truncate text-muted-foreground">{getAreaName(areaId)}</span>
               <div className="flex-1 h-2 bg-muted rounded-full overflow-hidden">
-                <div className="h-full bg-chart-1" style={{ width: `${(count / maxArea) * 100}%` }} />
+                <div
+                  className={`h-full ${getAreaColorDot(areaId || null)}`}
+                  style={{ width: `${(count / maxArea) * 100}%` }}
+                />
               </div>
               <span className="text-xs text-muted-foreground w-4 text-right">{count}</span>
             </div>

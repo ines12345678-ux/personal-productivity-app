@@ -1,4 +1,6 @@
 // app/layout.tsx
+// añade esta línea cerca del principio de app/layout.tsx, junto a los otros exports
+export const dynamic = 'force-dynamic'
 import type { Metadata, Viewport } from 'next'
 import { Analytics } from '@vercel/analytics/next'
 import { Geist, Geist_Mono } from 'next/font/google'
