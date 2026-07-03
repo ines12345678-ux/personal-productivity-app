@@ -1,14 +1,28 @@
 // app/notes/page.tsx
 'use client'
 
-import { useEffect, useMemo, useState } from 'react'
-import { NotebookPen, Plus, Trash2, ChevronDown, ChevronRight } from 'lucide-react'
+import { useEffect, useMemo, useRef, useState } from 'react'
+import {
+  NotebookPen,
+  Plus,
+  Trash2,
+  ChevronDown,
+  ChevronRight,
+  List,
+  Strikethrough,
+} from 'lucide-react'
 import { useNotesContext, Note } from '../context/notes-context'
 import { useCategoriesContext } from '../context/categories-context'
 import { CreateCategoryDialog } from '../create-category-dialog'
 
 const NO_AREA_KEY = '__none__'
 const CREATE_NEW = '__create_new__'
+
+// El contenido ahora se guarda como HTML simple (<ul><li>, <s>).
+// Para el preview de la lista lateral, quitamos las etiquetas.
+function stripHtml(html: string) {
+  return html.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim()
+}
 
 export default function NotesPage() {
   const { notes, addNote, updateNote, deleteNote } = useNotesContext()
@@ -18,8 +32,8 @@ export default function NotesPage() {
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>({})
   const [showAreaDialog, setShowAreaDialog] = useState(false)
 
-  // Selecciona la primera nota en cuanto llegan datos de Supabase,
-  // solo si no hay ninguna seleccionada todavía.
+  const contentRef = useRef<HTMLDivElement>(null)
+
   useEffect(() => {
     if (!selectedNoteId && notes.length > 0) {
       setSelectedNoteId(notes[0].id)
@@ -44,7 +58,6 @@ export default function NotesPage() {
 
   const toggleGroup = (key: string) => setCollapsed((prev) => ({ ...prev, [key]: !prev[key] }))
 
-  // Ahora es async: addNote devuelve una Promise porque espera a Supabase.
   const handleAddNote = async () => {
     const areaId = selectedNote?.areaId ?? areas[0]?.id ?? null
     const id = await addNote(areaId)
@@ -63,6 +76,23 @@ export default function NotesPage() {
       return
     }
     updateNote(selectedNote.id, { areaId: value || null })
+  }
+
+  const handleContentInput = () => {
+    if (!selectedNote || !contentRef.current) return
+    updateNote(selectedNote.id, { content: contentRef.current.innerHTML })
+  }
+
+  const applyBulletList = () => {
+    contentRef.current?.focus()
+    document.execCommand('insertUnorderedList')
+    handleContentInput()
+  }
+
+  const applyStrikethrough = () => {
+    contentRef.current?.focus()
+    document.execCommand('strikeThrough')
+    handleContentInput()
   }
 
   return (
@@ -122,7 +152,7 @@ export default function NotesPage() {
                             {note.title || 'Sin título'}
                           </p>
                           <p className="text-xs text-muted-foreground truncate mt-0.5">
-                            {note.content || 'Nota vacía'}
+                            {stripHtml(note.content) || 'Nota vacía'}
                           </p>
                         </button>
                       </li>
@@ -134,7 +164,7 @@ export default function NotesPage() {
           })}
         </div>
 
-        <div className="flex-1 border border-border rounded-xl p-6 flex flex-col gap-4 min-h-0 bg-card">
+        <div className="flex-1 border border-border rounded-xl p-6 flex flex-col gap-3 min-h-0 bg-card">
           {selectedNote ? (
             <>
               <div className="flex items-center gap-3">
@@ -166,11 +196,42 @@ export default function NotesPage() {
                 </button>
               </div>
 
-              <textarea
-                value={selectedNote.content}
-                onChange={(e) => updateNote(selectedNote.id, { content: e.target.value })}
-                placeholder="Escribe aquí..."
-                className="flex-1 resize-none outline-none text-sm leading-relaxed bg-transparent text-foreground"
+              {/* Barra de formato */}
+              <div className="flex items-center gap-1 border-b border-border pb-2">
+                <button
+                  type="button"
+                  onClick={applyBulletList}
+                  className="p-1.5 rounded-md text-muted-foreground hover:bg-muted hover:text-foreground"
+                  aria-label="Lista con viñetas"
+                  title="Lista con viñetas"
+                >
+                  <List className="w-4 h-4" />
+                </button>
+                <button
+                  type="button"
+                  onClick={applyStrikethrough}
+                  className="p-1.5 rounded-md text-muted-foreground hover:bg-muted hover:text-foreground"
+                  aria-label="Tachar texto"
+                  title="Tachar texto"
+                >
+                  <Strikethrough className="w-4 h-4" />
+                </button>
+              </div>
+
+              {/* key={selectedNote.id} fuerza remontar el editor al cambiar
+                  de nota, así el contenido no se mezcla entre notas */}
+              <div
+                key={selectedNote.id}
+                ref={contentRef}
+                contentEditable
+                suppressContentEditableWarning
+                onInput={handleContentInput}
+                dangerouslySetInnerHTML={{ __html: selectedNote.content }}
+                data-placeholder="Escribe aquí..."
+                className="flex-1 outline-none text-sm leading-relaxed bg-transparent text-foreground overflow-y-auto
+                  empty:before:content-[attr(data-placeholder)] empty:before:text-muted-foreground/60
+                  [&_ul]:list-disc [&_ul]:pl-5 [&_ul]:space-y-1
+                  [&_li]:leading-relaxed"
               />
 
               <p className="text-xs text-muted-foreground/60">
